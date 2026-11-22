@@ -584,6 +584,35 @@ impl Cipher {
         }
     }
 
+    pub async fn set_imported_dates(
+        &mut self,
+        imported_creation_date: Option<NaiveDateTime>,
+        imported_revision_date: Option<NaiveDateTime>,
+        conn: &DbConn,
+    ) -> EmptyResult {
+        if imported_creation_date.is_none() && imported_revision_date.is_none() {
+            return Ok(());
+        }
+
+        if let Some(imported_creation_date) = imported_creation_date {
+            self.created_at = imported_creation_date;
+        }
+        if let Some(imported_revision_date) = imported_revision_date {
+            self.updated_at = imported_revision_date;
+        }
+
+        let cipher_uuid = self.uuid.clone();
+        let created_at = self.created_at;
+        let updated_at = self.updated_at;
+        conn.run(move |conn| {
+            diesel::update(ciphers::table.filter(ciphers::uuid.eq(cipher_uuid)))
+                .set((ciphers::created_at.eq(created_at), ciphers::updated_at.eq(updated_at)))
+                .execute(conn)
+                .map_res("Error updating imported cipher dates")
+        })
+        .await
+    }
+
     pub async fn delete(&self, conn: &DbConn) -> EmptyResult {
         self.update_users_revision(conn).await;
 

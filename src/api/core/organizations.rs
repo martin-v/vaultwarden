@@ -2124,6 +2124,7 @@ async fn post_org_import(
             cipher_data.folder_id = None;
             // The authenticated membership, rather than the imported file, selects the organization.
             cipher_data.organization_id = Some(org_id.clone());
+            let (imported_creation_date, imported_revision_date) = cipher_data.parse_imported_dates();
             let mut cipher = Cipher::new(cipher_data.r#type);
             update_cipher_from_data(
                 &mut cipher,
@@ -2137,6 +2138,7 @@ async fn post_org_import(
                 import_export,
             )
             .await?;
+            cipher.set_imported_dates(imported_creation_date, imported_revision_date, &conn).await?;
             for collection_id in collection_ids {
                 CollectionCipher::save(&cipher.uuid, &collection_id, &conn).await?;
             }
@@ -2185,7 +2187,8 @@ mod org_import_tests {
                 let (user, mut membership) = test_db::member(&conn, &org.uuid, role, &permissions).await;
                 membership.access_all = role == MembershipType::Manager;
                 membership.save(&conn).await.unwrap();
-                let mut payload = json!({"ciphers":[{"name":"Cipher","type":2,"encryptedFor":user.uuid,"secureNote":{"type":0}}],
+                let mut payload = json!({"ciphers":[{"name":"Cipher","type":2,"encryptedFor":user.uuid,"secureNote":{"type":0},
+                    "creationDate":"2020-01-02T03:04:05.000000Z","revisionDate":"2021-02-03T04:05:06.000000Z"}],
                     "collections":[{"name":"New"}],"collectionRelationships":[{"key":0,"value":0}]});
                 match case {
                     "authorization" => {
@@ -2230,7 +2233,18 @@ mod org_import_tests {
                     Collection::find_by_organization(&org.uuid, &conn).await.len(),
                     usize::from(success || case == "authorization")
                 );
-                assert_eq!(Cipher::find_by_org(&org.uuid, &conn).await.len(), usize::from(success));
+                let imported_ciphers = Cipher::find_by_org(&org.uuid, &conn).await;
+                assert_eq!(imported_ciphers.len(), usize::from(success));
+                if success {
+                    assert_eq!(
+                        imported_ciphers[0].created_at,
+                        crate::util::parse_date("2020-01-02T03:04:05.000000Z").unwrap()
+                    );
+                    assert_eq!(
+                        imported_ciphers[0].updated_at,
+                        crate::util::parse_date("2021-02-03T04:05:06.000000Z").unwrap()
+                    );
+                }
                 assert_eq!(
                     CollectionUser::find_by_user(&user_id, &conn).await.len(),
                     usize::from(success && role == MembershipType::Custom)

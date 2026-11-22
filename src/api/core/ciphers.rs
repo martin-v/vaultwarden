@@ -26,7 +26,7 @@ use crate::{
             Send, User, UserId, is_data_blob_encrypted,
         },
     },
-    util::{NumberOrString, deser_opt_nonempty_str, save_temp_file},
+    util::{NumberOrString, deser_opt_nonempty_str, parse_date, save_temp_file},
 };
 
 use super::{folders::FolderData, sends::SIZE_525_MB};
@@ -337,6 +337,9 @@ pub struct CipherData {
 
     pub password_history: Option<Value>,
 
+    creation_date: Option<String>,
+    revision_date: Option<String>,
+
     // These are used during key rotation
     #[cfg_attr(not(feature = "unsafe_test_mode"), expect(unused, reason = "Only read by the unsafe test seeder"))]
     attachments: Option<Value>,
@@ -350,6 +353,25 @@ pub struct CipherData {
     // updating an existing cipher.
     last_known_revision_date: Option<String>,
     archived_date: Option<String>,
+}
+
+impl CipherData {
+    pub fn parse_imported_dates(&self) -> (Option<NaiveDateTime>, Option<NaiveDateTime>) {
+        fn parse_import_date(field: &str, date: Option<&str>) -> Option<NaiveDateTime> {
+            date.and_then(|date| match parse_date(date) {
+                Some(date) => Some(date),
+                None => {
+                    warn!("Error parsing {field} '{}'", date.escape_debug());
+                    None
+                }
+            })
+        }
+
+        (
+            parse_import_date("creationDate", self.creation_date.as_deref()),
+            parse_import_date("revisionDate", self.revision_date.as_deref()),
+        )
+    }
 }
 
 /// A field of a [`CipherData`] that fails upstream's model validation.
@@ -955,10 +977,12 @@ async fn post_ciphers_import(data: Json<ImportData>, headers: Headers, conn: DbC
         // A personal import always creates personal ciphers, the organization ID is ignored instead of rejected
         // Upstream: https://github.com/bitwarden/server/blob/b06b81c1fb33ce9c9872b96397ba2b4d879b66af/src/Api/Tools/Controllers/ImportCiphersController.cs#L58
         cipher_data.organization_id = None;
+        let (imported_creation_date, imported_revision_date) = cipher_data.parse_imported_dates();
 
         let mut cipher = Cipher::new(cipher_data.r#type);
         update_cipher_from_data(&mut cipher, cipher_data, &headers, None, &conn, &nt, UpdateType::None, true, false)
             .await?;
+        cipher.set_imported_dates(imported_creation_date, imported_revision_date, &conn).await?;
     }
 
     let mut user = headers.user;
