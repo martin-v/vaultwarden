@@ -584,21 +584,21 @@ impl Cipher {
         }
     }
 
-    pub async fn set_import_dates(
+    pub async fn set_imported_dates(
         &mut self,
-        created_at: Option<NaiveDateTime>,
-        updated_at: Option<NaiveDateTime>,
+        imported_creation_date: Option<NaiveDateTime>,
+        imported_revision_date: Option<NaiveDateTime>,
         conn: &DbConn,
     ) -> EmptyResult {
-        if created_at.is_none() && updated_at.is_none() {
+        if imported_creation_date.is_none() && imported_revision_date.is_none() {
             return Ok(());
         }
 
-        if let Some(created_at) = created_at {
-            self.created_at = created_at;
+        if let Some(imported_creation_date) = imported_creation_date {
+            self.created_at = imported_creation_date;
         }
-        if let Some(updated_at) = updated_at {
-            self.updated_at = updated_at;
+        if let Some(imported_revision_date) = imported_revision_date {
+            self.updated_at = imported_revision_date;
         }
 
         let cipher_uuid = self.uuid.clone();

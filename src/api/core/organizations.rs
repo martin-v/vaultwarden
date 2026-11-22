@@ -2124,7 +2124,7 @@ async fn post_org_import(
             cipher_data.folder_id = None;
             // The authenticated membership, rather than the imported file, selects the organization.
             cipher_data.organization_id = Some(org_id.clone());
-            let import_dates = cipher_data.import_dates();
+            let (imported_creation_date, imported_revision_date) = cipher_data.parse_imported_dates();
             let mut cipher = Cipher::new(cipher_data.r#type);
             update_cipher_from_data(
                 &mut cipher,
@@ -2138,7 +2138,7 @@ async fn post_org_import(
                 import_export,
             )
             .await?;
-            cipher.set_import_dates(import_dates.0, import_dates.1, &conn).await?;
+            cipher.set_imported_dates(imported_creation_date, imported_revision_date, &conn).await?;
             for collection_id in collection_ids {
                 CollectionCipher::save(&cipher.uuid, &collection_id, &conn).await?;
             }

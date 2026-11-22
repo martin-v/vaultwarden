@@ -356,7 +356,7 @@ pub struct CipherData {
 }
 
 impl CipherData {
-    pub fn import_dates(&self) -> (Option<NaiveDateTime>, Option<NaiveDateTime>) {
+    pub fn parse_imported_dates(&self) -> (Option<NaiveDateTime>, Option<NaiveDateTime>) {
         fn parse_import_date(field: &str, date: Option<&str>) -> Option<NaiveDateTime> {
             date.and_then(|date| match parse_date(date) {
                 Some(date) => Some(date),
@@ -977,12 +977,12 @@ async fn post_ciphers_import(data: Json<ImportData>, headers: Headers, conn: DbC
         // A personal import always creates personal ciphers, the organization ID is ignored instead of rejected
         // Upstream: https://github.com/bitwarden/server/blob/b06b81c1fb33ce9c9872b96397ba2b4d879b66af/src/Api/Tools/Controllers/ImportCiphersController.cs#L58
         cipher_data.organization_id = None;
-        let import_dates = cipher_data.import_dates();
+        let (imported_creation_date, imported_revision_date) = cipher_data.parse_imported_dates();
 
         let mut cipher = Cipher::new(cipher_data.r#type);
         update_cipher_from_data(&mut cipher, cipher_data, &headers, None, &conn, &nt, UpdateType::None, true, false)
             .await?;
-        cipher.set_import_dates(import_dates.0, import_dates.1, &conn).await?;
+        cipher.set_imported_dates(imported_creation_date, imported_revision_date, &conn).await?;
     }
 
     let mut user = headers.user;
